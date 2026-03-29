@@ -2,23 +2,18 @@ import React, { useState, useEffect, useRef, createContext, useContext } from 'r
 import axios from 'axios';
 import './App.css';
 
-// ============ API CONFIGURATION ============
-const API_URL = 'https://meme-project-backend.onrender.com/api';
-const IMAGE_BASE_URL = 'https://meme-project-backend.onrender.com';
+const API_URL = 'http://localhost:5000/api';
 axios.defaults.withCredentials = true;
 
 // ============ AUTH CONTEXT ============
 const AuthContext = createContext();
-
 const useAuth = () => useContext(AuthContext);
 
 const AuthProvider = ({ children }) => {
     const [user, setUser] = useState(null);
     const [loading, setLoading] = useState(true);
 
-    useEffect(() => {
-        checkAuth();
-    }, []);
+    useEffect(() => { checkAuth(); }, []);
 
     const checkAuth = async () => {
         try {
@@ -61,18 +56,11 @@ const AuthProvider = ({ children }) => {
     );
 };
 
-// ============ NAVBAR COMPONENT ============
+// ============ NAVBAR ============
 const Navbar = () => {
     const { user, logout } = useAuth();
-    const [currentPage, setCurrentPage] = useState('home');
-
     if (!user) return null;
-
-    const navigate = (page) => {
-        setCurrentPage(page);
-        window.dispatchEvent(new CustomEvent('pageChange', { detail: page }));
-    };
-
+    const navigate = (page) => window.dispatchEvent(new CustomEvent('pageChange', { detail: page }));
     return (
         <nav className="navbar">
             <div className="nav-container">
@@ -80,9 +68,7 @@ const Navbar = () => {
                 <div className="nav-menu">
                     <button className="nav-link" onClick={() => navigate('home')}>Home</button>
                     <button className="nav-link" onClick={() => navigate('create')}>Create Meme</button>
-                    <button className="nav-link" onClick={() => navigate('profile')}>
-                        👤 {user.username}{user.isGuest && ' (Guest)'}
-                    </button>
+                    <button className="nav-link" onClick={() => navigate('profile')}>👤 {user.username}{user.isGuest && ' (Guest)'}</button>
                     <button className="nav-link btn-link" onClick={logout}>Logout</button>
                 </div>
             </div>
@@ -125,9 +111,7 @@ const LoginPage = ({ onNavigate }) => {
                     <button type="submit" className="btn-primary">Login</button>
                 </form>
                 <button className="btn-secondary" onClick={handleGuestLogin}>Continue as Guest</button>
-                <p className="auth-link">
-                    Don't have an account? <button className="link-btn" onClick={() => onNavigate('register')}>Sign up</button>
-                </p>
+                <p className="auth-link">Don't have an account? <button className="link-btn" onClick={() => onNavigate('register')}>Sign up</button></p>
             </div>
         </div>
     );
@@ -164,9 +148,7 @@ const RegisterPage = ({ onNavigate }) => {
                     <input type="password" placeholder="Password (min 6 chars)" value={password} onChange={(e) => setPassword(e.target.value)} required />
                     <button type="submit" className="btn-primary">Sign Up</button>
                 </form>
-                <p className="auth-link">
-                    Already have an account? <button className="link-btn" onClick={() => onNavigate('login')}>Login</button>
-                </p>
+                <p className="auth-link">Already have an account? <button className="link-btn" onClick={() => onNavigate('login')}>Login</button></p>
             </div>
         </div>
     );
@@ -175,18 +157,13 @@ const RegisterPage = ({ onNavigate }) => {
 // ============ HOME PAGE ============
 const HomePage = ({ onNavigate }) => {
     const [trending, setTrending] = useState([]);
-
-    useEffect(() => {
-        fetchTrending();
-    }, []);
+    useEffect(() => { fetchTrending(); }, []);
 
     const fetchTrending = async () => {
         try {
             const response = await axios.get(`${API_URL}/trending`);
             setTrending(response.data);
-        } catch (error) {
-            console.error('Error fetching trending:', error);
-        }
+        } catch (error) { console.error(error); }
     };
 
     return (
@@ -196,7 +173,6 @@ const HomePage = ({ onNavigate }) => {
                 <p>Upload images, add text, and share with friends</p>
                 <button className="btn-create" onClick={() => onNavigate('create')}>Start Creating</button>
             </div>
-            
             <div className="features-section">
                 <h2>Features</h2>
                 <div className="features-grid">
@@ -206,14 +182,13 @@ const HomePage = ({ onNavigate }) => {
                     <div className="feature-card">📥 Download & Share</div>
                 </div>
             </div>
-
             {trending.length > 0 && (
                 <div className="trending-section">
                     <h2>🔥 Trending Memes</h2>
                     <div className="memes-grid">
                         {trending.map(meme => (
                             <div key={meme._id} className="meme-card">
-                                <img src={`${IMAGE_BASE_URL}${meme.imageUrl}`} alt="meme" />
+                                <img src={`http://localhost:5000${meme.imageUrl}`} alt="meme" />
                                 <div className="meme-info">
                                     <span>❤️ {meme.likes}</span>
                                     <span>👁️ {meme.views}</span>
@@ -228,10 +203,14 @@ const HomePage = ({ onNavigate }) => {
     );
 };
 
-// ============ CREATE MEME PAGE (with Text Color Picker) ============
+// ============ CREATE MEME PAGE (User Templates Only) ============
 const CreateMemePage = () => {
     const [selectedImage, setSelectedImage] = useState(null);
     const [templates, setTemplates] = useState([]);
+    const [showTemplateUpload, setShowTemplateUpload] = useState(false);
+    const [templateName, setTemplateName] = useState('');
+    const [templateFile, setTemplateFile] = useState(null);
+    const [uploading, setUploading] = useState(false);
     const [texts, setTexts] = useState([]);
     const [currentText, setCurrentText] = useState('');
     const [textColor, setTextColor] = useState('#FFFFFF');
@@ -240,24 +219,22 @@ const CreateMemePage = () => {
     const [aiSuggestions, setAiSuggestions] = useState([]);
     const canvasRef = useRef(null);
     const fileInputRef = useRef(null);
+    const templateFileInputRef = useRef(null);
+    const { user } = useAuth();
 
     useEffect(() => {
-        fetchTemplates();
-    }, []);
+        if (user && !user.isGuest) fetchTemplates();
+    }, [user]);
 
     useEffect(() => {
-        if (selectedImage) {
-            drawImage();
-        }
+        if (selectedImage) drawImage();
     }, [selectedImage, texts]);
 
     const fetchTemplates = async () => {
         try {
             const response = await axios.get(`${API_URL}/templates`);
             setTemplates(response.data);
-        } catch (error) {
-            console.error('Error fetching templates:', error);
-        }
+        } catch (error) { console.error(error); }
     };
 
     const drawImage = () => {
@@ -269,7 +246,6 @@ const CreateMemePage = () => {
             canvas.width = img.width;
             canvas.height = img.height;
             ctx.drawImage(img, 0, 0);
-            
             texts.forEach(text => {
                 ctx.font = `${text.fontSize || 30}px Arial`;
                 ctx.fillStyle = text.color || '#FFFFFF';
@@ -295,6 +271,50 @@ const CreateMemePage = () => {
         setSelectedImage(template.url);
     };
 
+    const handleTemplateFileSelect = (e) => {
+        const file = e.target.files[0];
+        if (file) {
+            setTemplateFile(file);
+            const reader = new FileReader();
+            reader.onload = (e) => {
+                document.getElementById('template-preview').src = e.target.result;
+            };
+            reader.readAsDataURL(file);
+        }
+    };
+
+    const uploadTemplate = async () => {
+        if (!templateFile) return alert('Please select an image file');
+        setUploading(true);
+        const formData = new FormData();
+        formData.append('image', templateFile);
+        formData.append('name', templateName || 'My Template');
+        try {
+            await axios.post(`${API_URL}/templates/upload`, formData);
+            alert('✅ Template uploaded!');
+            setShowTemplateUpload(false);
+            setTemplateName('');
+            setTemplateFile(null);
+            fetchTemplates();
+        } catch (error) {
+            alert('Upload failed. Please login.');
+        } finally {
+            setUploading(false);
+        }
+    };
+
+    const deleteTemplate = async (templateId) => {
+        if (window.confirm('Delete this template?')) {
+            try {
+                await axios.delete(`${API_URL}/templates/${templateId}`);
+                alert('✅ Template deleted');
+                fetchTemplates();
+            } catch (error) {
+                alert('Delete failed');
+            }
+        }
+    };
+
     const addText = () => {
         if (currentText.trim()) {
             setTexts([...texts, {
@@ -313,9 +333,7 @@ const CreateMemePage = () => {
             const response = await axios.post(`${API_URL}/ai-caption`);
             setAiSuggestions(response.data.suggestions);
             setShowAICaptions(true);
-        } catch (error) {
-            console.error('Error generating AI captions:', error);
-        }
+        } catch (error) { console.error(error); }
     };
 
     const addAICaption = (caption) => {
@@ -340,23 +358,18 @@ const CreateMemePage = () => {
     const saveToGallery = async () => {
         const canvas = canvasRef.current;
         const dataUrl = canvas.toDataURL();
-        
         const blob = await (await fetch(dataUrl)).blob();
         const formData = new FormData();
         formData.append('image', blob, 'meme.png');
-
         try {
             const uploadRes = await axios.post(`${API_URL}/upload`, formData);
-            const imageUrl = uploadRes.data.url;
-
             await axios.post(`${API_URL}/memes`, {
-                imageUrl,
+                imageUrl: uploadRes.data.url,
                 title: 'My Meme',
                 texts: texts
             });
             alert('✅ Meme saved to gallery!');
         } catch (error) {
-            console.error('Save error:', error);
             alert('Please login to save memes');
         }
     };
@@ -365,10 +378,7 @@ const CreateMemePage = () => {
         setTextColor(color);
         if (texts.length > 0 && window.lastSelectedTextIndex !== undefined) {
             const updatedTexts = [...texts];
-            updatedTexts[window.lastSelectedTextIndex] = {
-                ...updatedTexts[window.lastSelectedTextIndex],
-                color: color
-            };
+            updatedTexts[window.lastSelectedTextIndex] = { ...updatedTexts[window.lastSelectedTextIndex], color };
             setTexts(updatedTexts);
         }
     };
@@ -377,10 +387,7 @@ const CreateMemePage = () => {
         setTextSize(size);
         if (texts.length > 0 && window.lastSelectedTextIndex !== undefined) {
             const updatedTexts = [...texts];
-            updatedTexts[window.lastSelectedTextIndex] = {
-                ...updatedTexts[window.lastSelectedTextIndex],
-                fontSize: size
-            };
+            updatedTexts[window.lastSelectedTextIndex] = { ...updatedTexts[window.lastSelectedTextIndex], fontSize: size };
             setTexts(updatedTexts);
         }
     };
@@ -396,8 +403,7 @@ const CreateMemePage = () => {
     };
 
     const deleteText = (index) => {
-        const updatedTexts = texts.filter((_, i) => i !== index);
-        setTexts(updatedTexts);
+        setTexts(texts.filter((_, i) => i !== index));
     };
 
     return (
@@ -405,7 +411,6 @@ const CreateMemePage = () => {
             <div className="meme-editor">
                 <div className="editor-sidebar">
                     <h3>Create Your Meme</h3>
-                    
                     <div className="upload-section">
                         <h4>📸 Upload Image</h4>
                         <input type="file" accept="image/*" onChange={handleImageUpload} ref={fileInputRef} style={{display: 'none'}} />
@@ -413,82 +418,79 @@ const CreateMemePage = () => {
                     </div>
 
                     <div className="templates-section">
-                        <h4>🎨 Template Gallery</h4>
+                        <div className="templates-header">
+                            <h4>🎨 My Template Gallery</h4>
+                            {user && !user.isGuest && (
+                                <button className="btn-add-template" onClick={() => setShowTemplateUpload(!showTemplateUpload)}>
+                                    {showTemplateUpload ? '✖ Cancel' : '+ Add Template'}
+                                </button>
+                            )}
+                        </div>
+
+                        {showTemplateUpload && (
+                            <div className="template-upload-form">
+                                <h5>Upload Custom Template</h5>
+                                <input type="text" placeholder="Template name (optional)" value={templateName} onChange={(e) => setTemplateName(e.target.value)} />
+                                <input type="file" accept="image/*" onChange={handleTemplateFileSelect} ref={templateFileInputRef} />
+                                {templateFile && (
+                                    <div className="template-preview-container">
+                                        <img id="template-preview" alt="Preview" className="template-preview-img" />
+                                        <button onClick={uploadTemplate} disabled={uploading}>{uploading ? 'Uploading...' : 'Upload Template'}</button>
+                                    </div>
+                                )}
+                            </div>
+                        )}
+
                         <div className="templates-grid">
-                            {templates.map(template => (
-                                <img key={template.id} src={template.url} alt={template.name}
-                                    onClick={() => handleTemplateSelect(template)} className="template-thumbnail" />
-                            ))}
+                            {templates.length === 0 ? (
+                                <p className="no-templates">No templates yet. Click "+ Add Template" to upload your own images!</p>
+                            ) : (
+                                templates.map(template => (
+                                    <div key={template.id} className="template-item">
+                                        <img src={template.url} alt={template.name} onClick={() => handleTemplateSelect(template)} className="template-thumbnail" />
+                                        <div className="template-info">
+                                            <span>{template.name}</span>
+                                            <button className="delete-template-btn" onClick={() => deleteTemplate(template.id)}>🗑️</button>
+                                        </div>
+                                    </div>
+                                ))
+                            )}
                         </div>
                     </div>
 
                     <div className="text-section">
                         <h4>✏️ Add Text</h4>
-                        <input 
-                            type="text" 
-                            value={currentText} 
-                            onChange={(e) => setCurrentText(e.target.value)} 
-                            placeholder="Enter text" 
-                        />
-                        
+                        <input type="text" value={currentText} onChange={(e) => setCurrentText(e.target.value)} placeholder="Enter text" />
                         <div className="color-picker-section">
                             <label>🎨 Text Color:</label>
                             <div className="color-preview" style={{ backgroundColor: textColor }}></div>
-                            <input 
-                                type="color" 
-                                value={textColor} 
-                                onChange={(e) => updateTextColor(e.target.value)}
-                                className="color-input"
-                            />
+                            <input type="color" value={textColor} onChange={(e) => updateTextColor(e.target.value)} className="color-input" />
                         </div>
-
                         <div className="color-presets">
-                            <div className="color-preset" style={{ backgroundColor: '#FFFFFF' }} onClick={() => updateTextColor('#FFFFFF')} title="White"></div>
-                            <div className="color-preset" style={{ backgroundColor: '#000000' }} onClick={() => updateTextColor('#000000')} title="Black"></div>
-                            <div className="color-preset" style={{ backgroundColor: '#FF0000' }} onClick={() => updateTextColor('#FF0000')} title="Red"></div>
-                            <div className="color-preset" style={{ backgroundColor: '#00FF00' }} onClick={() => updateTextColor('#00FF00')} title="Green"></div>
-                            <div className="color-preset" style={{ backgroundColor: '#0000FF' }} onClick={() => updateTextColor('#0000FF')} title="Blue"></div>
-                            <div className="color-preset" style={{ backgroundColor: '#FFFF00' }} onClick={() => updateTextColor('#FFFF00')} title="Yellow"></div>
-                            <div className="color-preset" style={{ backgroundColor: '#FF00FF' }} onClick={() => updateTextColor('#FF00FF')} title="Magenta"></div>
-                            <div className="color-preset" style={{ backgroundColor: '#00FFFF' }} onClick={() => updateTextColor('#00FFFF')} title="Cyan"></div>
-                            <div className="color-preset" style={{ backgroundColor: '#FFA500' }} onClick={() => updateTextColor('#FFA500')} title="Orange"></div>
-                            <div className="color-preset" style={{ backgroundColor: '#800080' }} onClick={() => updateTextColor('#800080')} title="Purple"></div>
+                            {['#FFFFFF','#000000','#FF0000','#00FF00','#0000FF','#FFFF00','#FF00FF','#00FFFF','#FFA500','#800080'].map(c => (
+                                <div key={c} className="color-preset" style={{ backgroundColor: c }} onClick={() => updateTextColor(c)} title={c}></div>
+                            ))}
                         </div>
-
                         <div className="font-size-section">
                             <label>📏 Text Size: {textSize}px</label>
-                            <input 
-                                type="range" 
-                                min="10" 
-                                max="100" 
-                                value={textSize} 
-                                onChange={(e) => updateTextSize(parseInt(e.target.value))}
-                                className="size-slider"
-                            />
+                            <input type="range" min="10" max="100" value={textSize} onChange={(e) => updateTextSize(parseInt(e.target.value))} className="size-slider" />
                         </div>
-
                         <button onClick={addText}>Add Text</button>
                         <button onClick={generateAICaptions} className="btn-ai">🤖 AI Caption</button>
-                        
                         {showAICaptions && (
                             <div className="ai-suggestions">
                                 <h4>AI Suggestions:</h4>
-                                {aiSuggestions.map((suggestion, idx) => (
-                                    <div key={idx} className="suggestion-item" onClick={() => addAICaption(suggestion)}>
-                                        {suggestion}
-                                    </div>
+                                {aiSuggestions.map((s, idx) => (
+                                    <div key={idx} className="suggestion-item" onClick={() => addAICaption(s)}>{s}</div>
                                 ))}
                             </div>
                         )}
-
                         {texts.length > 0 && (
                             <div className="texts-list">
                                 <h4>Added Texts:</h4>
                                 {texts.map((text, idx) => (
                                     <div key={idx} className="text-item">
-                                        <div className="text-preview" style={{ color: text.color }}>
-                                            {text.content}
-                                        </div>
+                                        <div className="text-preview" style={{ color: text.color }}>{text.content}</div>
                                         <div className="text-actions">
                                             <button onClick={() => selectTextForEdit(idx)} className="edit-text-btn">✏️</button>
                                             <button onClick={() => deleteText(idx)} className="delete-text-btn">🗑️</button>
@@ -506,11 +508,7 @@ const CreateMemePage = () => {
                 </div>
 
                 <div className="editor-canvas">
-                    {selectedImage ? (
-                        <canvas ref={canvasRef} style={{ maxWidth: '100%', height: 'auto', borderRadius: '8px' }} />
-                    ) : (
-                        <div className="no-image">Select an image to start creating your meme</div>
-                    )}
+                    {selectedImage ? <canvas ref={canvasRef} style={{ maxWidth: '100%', height: 'auto', borderRadius: '8px' }} /> : <div className="no-image">Select an image to start creating your meme</div>}
                 </div>
             </div>
         </div>
@@ -521,46 +519,35 @@ const CreateMemePage = () => {
 const ProfilePage = () => {
     const { user } = useAuth();
     const [myMemes, setMyMemes] = useState([]);
-
-    useEffect(() => {
-        if (user && !user.isGuest) {
-            fetchMyMemes();
-        }
-    }, [user]);
+    useEffect(() => { if (user && !user.isGuest) fetchMyMemes(); }, [user]);
 
     const fetchMyMemes = async () => {
         try {
             const response = await axios.get(`${API_URL}/my-memes`);
             setMyMemes(response.data);
-        } catch (error) {
-            console.error('Error fetching memes:', error);
-        }
+        } catch (error) { console.error(error); }
     };
 
     if (!user) return null;
-
     return (
         <div className="profile-container">
             <div className="profile-header">
-                <div className="profile-avatar">
-                    {user.username?.charAt(0).toUpperCase()}
-                </div>
+                <div className="profile-avatar">{user.username?.charAt(0).toUpperCase()}</div>
                 <div className="profile-info">
                     <h2>{user.username}</h2>
                     {user.email && <p>{user.email}</p>}
                     {user.isGuest && <p className="guest-badge">Guest User</p>}
                 </div>
             </div>
-
             <div className="gallery-section">
                 <h3>📸 My Meme Gallery</h3>
                 {myMemes.length === 0 ? (
-                    <p className="no-memes">You haven't created any memes yet. <button className="link-btn" onClick={() => window.dispatchEvent(new CustomEvent('pageChange', { detail: 'create' }))}>Create one now!</button></p>
+                    <p className="no-memes">No memes yet. <button className="link-btn" onClick={() => window.dispatchEvent(new CustomEvent('pageChange', { detail: 'create' }))}>Create one now!</button></p>
                 ) : (
                     <div className="memes-grid">
                         {myMemes.map(meme => (
                             <div key={meme._id} className="meme-card">
-                                <img src={`${IMAGE_BASE_URL}${meme.imageUrl}`} alt="meme" />
+                                <img src={`http://localhost:5000${meme.imageUrl}`} alt="meme" />
                                 <div className="meme-date">{new Date(meme.createdAt).toLocaleDateString()}</div>
                             </div>
                         ))}
@@ -577,25 +564,17 @@ function App() {
     const { user, loading } = useAuth();
 
     useEffect(() => {
-        const handlePageChange = (e) => {
-            setCurrentPage(e.detail);
-        };
-        window.addEventListener('pageChange', handlePageChange);
-        return () => window.removeEventListener('pageChange', handlePageChange);
+        const handler = (e) => setCurrentPage(e.detail);
+        window.addEventListener('pageChange', handler);
+        return () => window.removeEventListener('pageChange', handler);
     }, []);
 
     useEffect(() => {
-        if (user && currentPage === 'login') {
-            setCurrentPage('home');
-        } else if (!user && (currentPage === 'home' || currentPage === 'create' || currentPage === 'profile')) {
-            setCurrentPage('login');
-        }
+        if (user && currentPage === 'login') setCurrentPage('home');
+        else if (!user && (currentPage === 'home' || currentPage === 'create' || currentPage === 'profile')) setCurrentPage('login');
     }, [user, currentPage]);
 
-    const navigate = (page) => {
-        setCurrentPage(page);
-    };
-
+    const navigate = (page) => setCurrentPage(page);
     if (loading) return <div className="loading">Loading...</div>;
 
     return (
@@ -610,7 +589,6 @@ function App() {
     );
 }
 
-// ============ WRAPPER ============
 export default function AppWrapper() {
     return (
         <AuthProvider>
