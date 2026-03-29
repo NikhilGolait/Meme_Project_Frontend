@@ -3,7 +3,8 @@ import axios from 'axios';
 import './App.css';
 
 // ============ API CONFIGURATION ============
-const API_URL = 'http://localhost:5000/api';
+const API_URL = 'https://meme-project-backend.onrender.com/api';
+const IMAGE_BASE_URL = 'https://meme-project-backend.onrender.com';
 axios.defaults.withCredentials = true;
 
 // ============ AUTH CONTEXT ============
@@ -212,7 +213,7 @@ const HomePage = ({ onNavigate }) => {
                     <div className="memes-grid">
                         {trending.map(meme => (
                             <div key={meme._id} className="meme-card">
-                                <img src={`http://localhost:5000${meme.imageUrl}`} alt="meme" />
+                                <img src={`${IMAGE_BASE_URL}${meme.imageUrl}`} alt="meme" />
                                 <div className="meme-info">
                                     <span>❤️ {meme.likes}</span>
                                     <span>👁️ {meme.views}</span>
@@ -559,7 +560,7 @@ const ProfilePage = () => {
                     <div className="memes-grid">
                         {myMemes.map(meme => (
                             <div key={meme._id} className="meme-card">
-                                <img src={`http://localhost:5000${meme.imageUrl}`} alt="meme" />
+                                <img src={`${IMAGE_BASE_URL}${meme.imageUrl}`} alt="meme" />
                                 <div className="meme-date">{new Date(meme.createdAt).toLocaleDateString()}</div>
                             </div>
                         ))}
