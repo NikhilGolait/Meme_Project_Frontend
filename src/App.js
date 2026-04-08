@@ -68,6 +68,7 @@ const Navbar = () => {
                 <div className="nav-menu">
                     <button className="nav-link" onClick={() => navigate('home')}>Home</button>
                     <button className="nav-link" onClick={() => navigate('create')}>Create Meme</button>
+                    <button className="nav-link" onClick={() => navigate('create-gif')}>Create GIF Meme</button>
                     <button className="nav-link" onClick={() => navigate('profile')}>👤 {user.username}{user.isGuest && ' (Guest)'}</button>
                     <button className="nav-link btn-link" onClick={logout}>Logout</button>
                 </div>
@@ -179,6 +180,7 @@ const HomePage = ({ onNavigate }) => {
                     <div className="feature-card">🎨 Upload Images</div>
                     <div className="feature-card">✏️ Add Text</div>
                     <div className="feature-card">🤖 AI Captions</div>
+                    <div className="feature-card">🎬 GIF Memes</div>
                     <div className="feature-card">📥 Download & Share</div>
                 </div>
             </div>
@@ -203,7 +205,7 @@ const HomePage = ({ onNavigate }) => {
     );
 };
 
-// ============ CREATE MEME PAGE (No Default Templates) ============
+// ============ CREATE MEME PAGE (Image with Gemini AI) ============
 const CreateMemePage = () => {
     const [selectedImage, setSelectedImage] = useState(null);
     const [templates, setTemplates] = useState([]);
@@ -217,6 +219,7 @@ const CreateMemePage = () => {
     const [textSize, setTextSize] = useState(30);
     const [showAICaptions, setShowAICaptions] = useState(false);
     const [aiSuggestions, setAiSuggestions] = useState([]);
+    const [loadingAI, setLoadingAI] = useState(false);
     const canvasRef = useRef(null);
     const fileInputRef = useRef(null);
     const templateFileInputRef = useRef(null);
@@ -315,25 +318,33 @@ const CreateMemePage = () => {
         }
     };
 
-    const addText = () => {
-        if (currentText.trim()) {
-            setTexts([...texts, {
-                content: currentText,
-                x: 250,
-                y: 50 + (texts.length * 40),
-                fontSize: textSize,
-                color: textColor
-            }]);
-            setCurrentText('');
-        }
-    };
-
+    // Gemini AI Vision Caption Generation
     const generateAICaptions = async () => {
+        if (!selectedImage) {
+            alert('Please select an image first');
+            return;
+        }
+        
+        setLoadingAI(true);
+        setShowAICaptions(false);
+        
         try {
-            const response = await axios.post(`${API_URL}/ai-caption`);
+            const base64Data = selectedImage.split(',')[1];
+            
+            const response = await axios.post(`${API_URL}/ai-caption-vision`, {
+                imageBase64: base64Data,
+                mediaType: 'image',
+                customPrompt: "Analyze this image and generate 5 funny meme captions. Consider what's happening, people's expressions, objects, and any text visible. Make them short, clever, and relatable."
+            });
+            
             setAiSuggestions(response.data.suggestions);
             setShowAICaptions(true);
-        } catch (error) { console.error(error); }
+        } catch (error) {
+            console.error('AI caption error:', error);
+            alert('Failed to generate AI captions');
+        } finally {
+            setLoadingAI(false);
+        }
     };
 
     const addAICaption = (caption) => {
@@ -345,6 +356,19 @@ const CreateMemePage = () => {
             color: textColor
         }]);
         setShowAICaptions(false);
+    };
+
+    const addText = () => {
+        if (currentText.trim()) {
+            setTexts([...texts, {
+                content: currentText,
+                x: 250,
+                y: 50 + (texts.length * 40),
+                fontSize: textSize,
+                color: textColor
+            }]);
+            setCurrentText('');
+        }
     };
 
     const downloadMeme = () => {
@@ -431,24 +455,12 @@ const CreateMemePage = () => {
                         {showTemplateUpload && (
                             <div className="template-upload-form">
                                 <h5>Upload Custom Template</h5>
-                                <input 
-                                    type="text" 
-                                    placeholder="Template name (optional)" 
-                                    value={templateName} 
-                                    onChange={(e) => setTemplateName(e.target.value)} 
-                                />
-                                <input 
-                                    type="file" 
-                                    accept="image/*" 
-                                    onChange={handleTemplateFileSelect} 
-                                    ref={templateFileInputRef} 
-                                />
+                                <input type="text" placeholder="Template name (optional)" value={templateName} onChange={(e) => setTemplateName(e.target.value)} />
+                                <input type="file" accept="image/*" onChange={handleTemplateFileSelect} ref={templateFileInputRef} />
                                 {templateFile && (
                                     <div className="template-preview-container">
                                         <img id="template-preview" alt="Preview" className="template-preview-img" />
-                                        <button onClick={uploadTemplate} disabled={uploading}>
-                                            {uploading ? 'Uploading...' : 'Upload Template'}
-                                        </button>
+                                        <button onClick={uploadTemplate} disabled={uploading}>{uploading ? 'Uploading...' : 'Upload Template'}</button>
                                     </div>
                                 )}
                             </div>
@@ -460,20 +472,10 @@ const CreateMemePage = () => {
                             ) : (
                                 templates.map(template => (
                                     <div key={template.id} className="template-item">
-                                        <img 
-                                            src={template.url} 
-                                            alt={template.name} 
-                                            onClick={() => handleTemplateSelect(template)} 
-                                            className="template-thumbnail" 
-                                        />
+                                        <img src={template.url} alt={template.name} onClick={() => handleTemplateSelect(template)} className="template-thumbnail" />
                                         <div className="template-info">
                                             <span>{template.name}</span>
-                                            <button 
-                                                className="delete-template-btn" 
-                                                onClick={() => deleteTemplate(template.id)}
-                                            >
-                                                🗑️
-                                            </button>
+                                            <button className="delete-template-btn" onClick={() => deleteTemplate(template.id)}>🗑️</button>
                                         </div>
                                     </div>
                                 ))
@@ -483,22 +485,12 @@ const CreateMemePage = () => {
 
                     <div className="text-section">
                         <h4>✏️ Add Text</h4>
-                        <input 
-                            type="text" 
-                            value={currentText} 
-                            onChange={(e) => setCurrentText(e.target.value)} 
-                            placeholder="Enter text" 
-                        />
+                        <input type="text" value={currentText} onChange={(e) => setCurrentText(e.target.value)} placeholder="Enter text" />
                         
                         <div className="color-picker-section">
                             <label>🎨 Text Color:</label>
                             <div className="color-preview" style={{ backgroundColor: textColor }}></div>
-                            <input 
-                                type="color" 
-                                value={textColor} 
-                                onChange={(e) => updateTextColor(e.target.value)} 
-                                className="color-input" 
-                            />
+                            <input type="color" value={textColor} onChange={(e) => updateTextColor(e.target.value)} className="color-input" />
                         </div>
 
                         <div className="color-presets">
@@ -509,22 +501,17 @@ const CreateMemePage = () => {
 
                         <div className="font-size-section">
                             <label>📏 Text Size: {textSize}px</label>
-                            <input 
-                                type="range" 
-                                min="10" 
-                                max="100" 
-                                value={textSize} 
-                                onChange={(e) => updateTextSize(parseInt(e.target.value))} 
-                                className="size-slider" 
-                            />
+                            <input type="range" min="10" max="100" value={textSize} onChange={(e) => updateTextSize(parseInt(e.target.value))} className="size-slider" />
                         </div>
 
                         <button onClick={addText}>Add Text</button>
-                        <button onClick={generateAICaptions} className="btn-ai">🤖 AI Caption</button>
+                        <button onClick={generateAICaptions} className="btn-ai" disabled={loadingAI}>
+                            {loadingAI ? '🤖 Analyzing with AI...' : '🤖 AI Caption'}
+                        </button>
                         
                         {showAICaptions && (
                             <div className="ai-suggestions">
-                                <h4>AI Suggestions:</h4>
+                                <h4>✨ AI-Generated Captions (Gemini Vision):</h4>
                                 {aiSuggestions.map((s, idx) => (
                                     <div key={idx} className="suggestion-item" onClick={() => addAICaption(s)}>
                                         {s}
@@ -538,9 +525,7 @@ const CreateMemePage = () => {
                                 <h4>Added Texts:</h4>
                                 {texts.map((text, idx) => (
                                     <div key={idx} className="text-item">
-                                        <div className="text-preview" style={{ color: text.color }}>
-                                            {text.content}
-                                        </div>
+                                        <div className="text-preview" style={{ color: text.color }}>{text.content}</div>
                                         <div className="text-actions">
                                             <button onClick={() => selectTextForEdit(idx)} className="edit-text-btn">✏️</button>
                                             <button onClick={() => deleteText(idx)} className="delete-text-btn">🗑️</button>
@@ -569,19 +554,296 @@ const CreateMemePage = () => {
     );
 };
 
+// ============ CREATE GIF MEME PAGE (with Gemini AI) ============
+const CreateGifMemePage = () => {
+    const [selectedGif, setSelectedGif] = useState(null);
+    const [texts, setTexts] = useState([]);
+    const [currentText, setCurrentText] = useState('');
+    const [textColor, setTextColor] = useState('#FFFFFF');
+    const [textSize, setTextSize] = useState(30);
+    const [showAICaptions, setShowAICaptions] = useState(false);
+    const [aiSuggestions, setAiSuggestions] = useState([]);
+    const [loadingAI, setLoadingAI] = useState(false);
+    const fileInputRef = useRef(null);
+    const { user } = useAuth();
+
+    const handleGifUpload = (e) => {
+        const file = e.target.files[0];
+        if (file && file.type === 'image/gif') {
+            const reader = new FileReader();
+            reader.onload = (e) => {
+                setSelectedGif(e.target.result);
+            };
+            reader.readAsDataURL(file);
+        } else {
+            alert('Please upload a valid GIF file');
+        }
+    };
+
+    // Capture first frame of GIF for AI analysis
+    const captureGifFrame = (gifUrl) => {
+        return new Promise((resolve) => {
+            const img = new Image();
+            img.src = gifUrl;
+            img.onload = () => {
+                const canvas = document.createElement('canvas');
+                canvas.width = img.width;
+                canvas.height = img.height;
+                canvas.getContext('2d').drawImage(img, 0, 0);
+                resolve(canvas.toDataURL('image/jpeg'));
+            };
+        });
+    };
+
+    // Gemini AI Vision for GIF
+    const generateAICaptions = async () => {
+        if (!selectedGif) {
+            alert('Please select a GIF first');
+            return;
+        }
+        
+        setLoadingAI(true);
+        setShowAICaptions(false);
+        
+        try {
+            const firstFrame = await captureGifFrame(selectedGif);
+            const base64Data = firstFrame.split(',')[1];
+            
+            const response = await axios.post(`${API_URL}/ai-caption-vision`, {
+                imageBase64: base64Data,
+                mediaType: 'gif',
+                customPrompt: "This is from an animated GIF. Based on this frame, generate 5 funny meme captions. Consider the action, expressions, and humor of the GIF. Make them punchy and meme-worthy."
+            });
+            
+            setAiSuggestions(response.data.suggestions);
+            setShowAICaptions(true);
+        } catch (error) {
+            console.error('AI caption error:', error);
+            alert('Failed to generate AI captions');
+        } finally {
+            setLoadingAI(false);
+        }
+    };
+
+    const addText = () => {
+        if (currentText.trim()) {
+            setTexts([...texts, {
+                content: currentText,
+                x: 50,
+                y: 50 + (texts.length * 40),
+                fontSize: textSize,
+                color: textColor
+            }]);
+            setCurrentText('');
+        }
+    };
+
+    const addAICaption = (caption) => {
+        setTexts([...texts, {
+            content: caption,
+            x: 50,
+            y: 50 + (texts.length * 40),
+            fontSize: textSize,
+            color: textColor
+        }]);
+        setShowAICaptions(false);
+    };
+
+    const downloadGifMeme = () => {
+        alert('GIF download with text overlay requires advanced processing. The GIF will be saved without text for now.');
+        const link = document.createElement('a');
+        link.download = 'gif-meme.gif';
+        link.href = selectedGif;
+        link.click();
+    };
+
+    const saveGifToGallery = async () => {
+        if (!selectedGif) {
+            alert('Please select a GIF first');
+            return;
+        }
+
+        const response = await fetch(selectedGif);
+        const blob = await response.blob();
+        const formData = new FormData();
+        formData.append('gif', blob, 'gif-meme.gif');
+
+        try {
+            const uploadRes = await axios.post(`${API_URL}/upload-gif`, formData);
+            const gifUrl = uploadRes.data.url;
+
+            await axios.post(`${API_URL}/gif-memes`, {
+                gifUrl: gifUrl,
+                title: 'My GIF Meme',
+                texts: texts
+            });
+            alert('✅ GIF Meme saved to gallery!');
+        } catch (error) {
+            console.error('Save error:', error);
+            alert('Please login to save GIF memes');
+        }
+    };
+
+    const updateTextColor = (color) => {
+        setTextColor(color);
+        if (texts.length > 0 && window.lastSelectedTextIndex !== undefined) {
+            const updatedTexts = [...texts];
+            updatedTexts[window.lastSelectedTextIndex] = { ...updatedTexts[window.lastSelectedTextIndex], color };
+            setTexts(updatedTexts);
+        }
+    };
+
+    const updateTextSize = (size) => {
+        setTextSize(size);
+        if (texts.length > 0 && window.lastSelectedTextIndex !== undefined) {
+            const updatedTexts = [...texts];
+            updatedTexts[window.lastSelectedTextIndex] = { ...updatedTexts[window.lastSelectedTextIndex], fontSize: size };
+            setTexts(updatedTexts);
+        }
+    };
+
+    const selectTextForEdit = (index) => {
+        window.lastSelectedTextIndex = index;
+        const selectedText = texts[index];
+        setCurrentText(selectedText.content);
+        setTextColor(selectedText.color || '#FFFFFF');
+        setTextSize(selectedText.fontSize || 30);
+        const updatedTexts = texts.filter((_, i) => i !== index);
+        setTexts(updatedTexts);
+    };
+
+    const deleteText = (index) => {
+        setTexts(texts.filter((_, i) => i !== index));
+    };
+
+    return (
+        <div className="create-meme-container">
+            <div className="meme-editor">
+                <div className="editor-sidebar">
+                    <h3>Create Your GIF Meme</h3>
+                    
+                    <div className="upload-section">
+                        <h4>🎬 Upload GIF</h4>
+                        <input type="file" accept="image/gif" onChange={handleGifUpload} ref={fileInputRef} style={{display: 'none'}} />
+                        <button onClick={() => fileInputRef.current.click()}>Choose GIF File</button>
+                        <p className="gif-note">* Supported format: GIF (max 10MB)</p>
+                    </div>
+
+                    <div className="text-section">
+                        <h4>✏️ Add Text to GIF</h4>
+                        <input type="text" value={currentText} onChange={(e) => setCurrentText(e.target.value)} placeholder="Enter text" />
+                        
+                        <div className="color-picker-section">
+                            <label>🎨 Text Color:</label>
+                            <div className="color-preview" style={{ backgroundColor: textColor }}></div>
+                            <input type="color" value={textColor} onChange={(e) => updateTextColor(e.target.value)} className="color-input" />
+                        </div>
+
+                        <div className="color-presets">
+                            {['#FFFFFF','#000000','#FF0000','#00FF00','#0000FF','#FFFF00','#FF00FF','#00FFFF','#FFA500','#800080'].map(c => (
+                                <div key={c} className="color-preset" style={{ backgroundColor: c }} onClick={() => updateTextColor(c)} title={c}></div>
+                            ))}
+                        </div>
+
+                        <div className="font-size-section">
+                            <label>📏 Text Size: {textSize}px</label>
+                            <input type="range" min="10" max="100" value={textSize} onChange={(e) => updateTextSize(parseInt(e.target.value))} className="size-slider" />
+                        </div>
+
+                        <button onClick={addText}>Add Text to GIF</button>
+                        <button onClick={generateAICaptions} className="btn-ai" disabled={loadingAI}>
+                            {loadingAI ? '🤖 Analyzing GIF with AI...' : '🤖 AI Caption'}
+                        </button>
+                        
+                        {showAICaptions && (
+                            <div className="ai-suggestions">
+                                <h4>✨ AI-Generated Captions (Gemini Vision):</h4>
+                                {aiSuggestions.map((s, idx) => (
+                                    <div key={idx} className="suggestion-item" onClick={() => addAICaption(s)}>
+                                        {s}
+                                    </div>
+                                ))}
+                            </div>
+                        )}
+
+                        {texts.length > 0 && (
+                            <div className="texts-list">
+                                <h4>Added Texts:</h4>
+                                {texts.map((text, idx) => (
+                                    <div key={idx} className="text-item">
+                                        <div className="text-preview" style={{ color: text.color }}>{text.content}</div>
+                                        <div className="text-actions">
+                                            <button onClick={() => selectTextForEdit(idx)} className="edit-text-btn">✏️</button>
+                                            <button onClick={() => deleteText(idx)} className="delete-text-btn">🗑️</button>
+                                        </div>
+                                    </div>
+                                ))}
+                            </div>
+                        )}
+                    </div>
+
+                    <div className="action-buttons">
+                        <button onClick={downloadGifMeme} className="btn-download">📥 Download GIF</button>
+                        <button onClick={saveGifToGallery} className="btn-save">💾 Save GIF to Gallery</button>
+                    </div>
+                </div>
+
+                <div className="editor-canvas">
+                    {selectedGif ? (
+                        <div className="gif-preview-container">
+                            <img src={selectedGif} alt="GIF preview" className="gif-preview" />
+                            <div className="gif-text-overlay">
+                                {texts.map((text, idx) => (
+                                    <div
+                                        key={idx}
+                                        className="gif-text"
+                                        style={{
+                                            left: `${text.x || 50}%`,
+                                            top: `${text.y || 50}px`,
+                                            color: text.color,
+                                            fontSize: `${text.fontSize}px`,
+                                            transform: 'translateX(-50%)'
+                                        }}
+                                    >
+                                        {text.content}
+                                    </div>
+                                ))}
+                            </div>
+                        </div>
+                    ) : (
+                        <div className="no-image">Select a GIF to start creating your GIF meme</div>
+                    )}
+                </div>
+            </div>
+        </div>
+    );
+};
+
 // ============ PROFILE PAGE ============
 const ProfilePage = () => {
     const { user } = useAuth();
     const [myMemes, setMyMemes] = useState([]);
+    const [myGifMemes, setMyGifMemes] = useState([]);
+    const [activeTab, setActiveTab] = useState('memes');
     
     useEffect(() => { 
-        if (user && !user.isGuest) fetchMyMemes(); 
+        if (user && !user.isGuest) {
+            fetchMyMemes();
+            fetchMyGifMemes();
+        }
     }, [user]);
 
     const fetchMyMemes = async () => {
         try {
             const response = await axios.get(`${API_URL}/my-memes`);
             setMyMemes(response.data);
+        } catch (error) { console.error(error); }
+    };
+
+    const fetchMyGifMemes = async () => {
+        try {
+            const response = await axios.get(`${API_URL}/my-gif-memes`);
+            setMyGifMemes(response.data);
         } catch (error) { console.error(error); }
     };
 
@@ -601,23 +863,47 @@ const ProfilePage = () => {
             </div>
 
             <div className="gallery-section">
-                <h3>📸 My Meme Gallery</h3>
-                {myMemes.length === 0 ? (
-                    <p className="no-memes">
-                        No memes yet. 
-                        <button className="link-btn" onClick={() => window.dispatchEvent(new CustomEvent('pageChange', { detail: 'create' }))}>
-                            Create one now!
-                        </button>
-                    </p>
-                ) : (
-                    <div className="memes-grid">
-                        {myMemes.map(meme => (
-                            <div key={meme._id} className="meme-card">
-                                <img src={`http://localhost:5000${meme.imageUrl}`} alt="meme" />
-                                <div className="meme-date">{new Date(meme.createdAt).toLocaleDateString()}</div>
+                <div className="gallery-tabs">
+                    <button className={`tab-btn ${activeTab === 'memes' ? 'active' : ''}`} onClick={() => setActiveTab('memes')}>
+                        📸 My Memes ({myMemes.length})
+                    </button>
+                    <button className={`tab-btn ${activeTab === 'gifs' ? 'active' : ''}`} onClick={() => setActiveTab('gifs')}>
+                        🎬 My GIF Memes ({myGifMemes.length})
+                    </button>
+                </div>
+
+                {activeTab === 'memes' && (
+                    <>
+                        {myMemes.length === 0 ? (
+                            <p className="no-memes">No memes yet. <button className="link-btn" onClick={() => window.dispatchEvent(new CustomEvent('pageChange', { detail: 'create' }))}>Create one now!</button></p>
+                        ) : (
+                            <div className="memes-grid">
+                                {myMemes.map(meme => (
+                                    <div key={meme._id} className="meme-card">
+                                        <img src={`http://localhost:5000${meme.imageUrl}`} alt="meme" />
+                                        <div className="meme-date">{new Date(meme.createdAt).toLocaleDateString()}</div>
+                                    </div>
+                                ))}
                             </div>
-                        ))}
-                    </div>
+                        )}
+                    </>
+                )}
+
+                {activeTab === 'gifs' && (
+                    <>
+                        {myGifMemes.length === 0 ? (
+                            <p className="no-memes">No GIF memes yet. <button className="link-btn" onClick={() => window.dispatchEvent(new CustomEvent('pageChange', { detail: 'create-gif' }))}>Create one now!</button></p>
+                        ) : (
+                            <div className="memes-grid">
+                                {myGifMemes.map(gif => (
+                                    <div key={gif._id} className="meme-card">
+                                        <img src={`http://localhost:5000${gif.gifUrl}`} alt="gif meme" />
+                                        <div className="meme-date">{new Date(gif.createdAt).toLocaleDateString()}</div>
+                                    </div>
+                                ))}
+                            </div>
+                        )}
+                    </>
                 )}
             </div>
         </div>
@@ -637,7 +923,7 @@ function App() {
 
     useEffect(() => {
         if (user && currentPage === 'login') setCurrentPage('home');
-        else if (!user && (currentPage === 'home' || currentPage === 'create' || currentPage === 'profile')) 
+        else if (!user && (currentPage === 'home' || currentPage === 'create' || currentPage === 'create-gif' || currentPage === 'profile')) 
             setCurrentPage('login');
     }, [user, currentPage]);
 
@@ -651,6 +937,7 @@ function App() {
             {currentPage === 'register' && <RegisterPage onNavigate={navigate} />}
             {currentPage === 'home' && <HomePage onNavigate={navigate} />}
             {currentPage === 'create' && <CreateMemePage />}
+            {currentPage === 'create-gif' && <CreateGifMemePage />}
             {currentPage === 'profile' && <ProfilePage />}
         </div>
     );

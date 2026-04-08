@@ -51,6 +51,7 @@ body {
     display: flex;
     gap: 20px;
     align-items: center;
+    flex-wrap: wrap;
 }
 
 .nav-link {
@@ -323,6 +324,14 @@ body {
     background: #5a67d8;
 }
 
+/* GIF Note */
+.gif-note {
+    font-size: 12px;
+    color: #666;
+    margin-top: 5px;
+    text-align: center;
+}
+
 /* Template Management */
 .templates-header {
     display: flex;
@@ -542,6 +551,12 @@ body {
     border-radius: 6px;
 }
 
+.ai-suggestions h4 {
+    font-size: 0.85rem;
+    color: #48bb78;
+    margin-bottom: 8px;
+}
+
 .suggestion-item {
     padding: 8px;
     margin: 5px 0;
@@ -655,6 +670,19 @@ body {
     transform: translateY(-2px);
 }
 
+.btn-ai {
+    background: #9b59b6 !important;
+}
+
+.btn-ai:hover {
+    background: #8e44ad !important;
+}
+
+.btn-ai:disabled {
+    background: #ccc !important;
+    cursor: not-allowed;
+}
+
 .editor-canvas {
     background: white;
     padding: 20px;
@@ -664,12 +692,38 @@ body {
     display: flex;
     align-items: center;
     justify-content: center;
+    position: relative;
 }
 
 .no-image {
     color: #999;
     text-align: center;
     padding: 40px;
+}
+
+/* GIF Preview Styles */
+.gif-preview-container {
+    position: relative;
+    display: inline-block;
+    max-width: 100%;
+}
+
+.gif-preview {
+    max-width: 100%;
+    height: auto;
+    border-radius: 8px;
+}
+
+.gif-text-overlay {
+    position: relative;
+}
+
+.gif-text {
+    position: absolute;
+    font-weight: bold;
+    text-shadow: 2px 2px 4px rgba(0,0,0,0.5);
+    white-space: nowrap;
+    z-index: 10;
 }
 
 /* Profile Page */
@@ -723,6 +777,31 @@ body {
 .gallery-section h3 {
     color: white;
     margin-bottom: 20px;
+}
+
+.gallery-tabs {
+    display: flex;
+    gap: 10px;
+    margin-bottom: 20px;
+}
+
+.gallery-tabs .tab-btn {
+    background: rgba(255, 255, 255, 0.2);
+    color: white;
+    padding: 10px 20px;
+    border: none;
+    border-radius: 8px;
+    cursor: pointer;
+    transition: all 0.3s;
+}
+
+.gallery-tabs .tab-btn.active {
+    background: white;
+    color: #667eea;
+}
+
+.gallery-tabs .tab-btn:hover {
+    background: rgba(255, 255, 255, 0.3);
 }
 
 .memes-grid {
@@ -823,5 +902,16 @@ body {
     
     .templates-grid {
         grid-template-columns: 1fr;
+    }
+
+    .gallery-tabs {
+        flex-direction: column;
+    }
+    
+    .gif-text {
+        font-size: 16px !important;
+        white-space: normal !important;
+        word-break: break-word;
+        max-width: 90%;
     }
 }
