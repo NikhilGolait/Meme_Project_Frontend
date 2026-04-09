@@ -205,7 +205,7 @@ const HomePage = ({ onNavigate }) => {
     );
 };
 
-// ============ CREATE MEME PAGE (Image with Gemini AI) ============
+// ============ CREATE MEME PAGE (Images with Draggable Text) ============
 const CreateMemePage = () => {
     const [selectedImage, setSelectedImage] = useState(null);
     const [templates, setTemplates] = useState([]);
@@ -220,6 +220,8 @@ const CreateMemePage = () => {
     const [showAICaptions, setShowAICaptions] = useState(false);
     const [aiSuggestions, setAiSuggestions] = useState([]);
     const [loadingAI, setLoadingAI] = useState(false);
+    const [draggingTextIndex, setDraggingTextIndex] = useState(null);
+    const [dragOffset, setDragOffset] = useState({ x: 0, y: 0 });
     const canvasRef = useRef(null);
     const fileInputRef = useRef(null);
     const templateFileInputRef = useRef(null);
@@ -255,8 +257,8 @@ const CreateMemePage = () => {
                 ctx.strokeStyle = 'black';
                 ctx.lineWidth = 2;
                 ctx.textAlign = 'center';
-                ctx.strokeText(text.content, text.x || canvas.width/2, text.y || 50);
-                ctx.fillText(text.content, text.x || canvas.width/2, text.y || 50);
+                ctx.strokeText(text.content, text.x, text.y);
+                ctx.fillText(text.content, text.x, text.y);
             });
         };
     };
@@ -318,7 +320,97 @@ const CreateMemePage = () => {
         }
     };
 
-    // Gemini AI Vision Caption Generation
+    const getMousePosition = (e) => {
+        const canvas = canvasRef.current;
+        const rect = canvas.getBoundingClientRect();
+        const scaleX = canvas.width / rect.width;
+        const scaleY = canvas.height / rect.height;
+        
+        let clientX, clientY;
+        if (e.touches) {
+            clientX = e.touches[0].clientX;
+            clientY = e.touches[0].clientY;
+        } else {
+            clientX = e.clientX;
+            clientY = e.clientY;
+        }
+        
+        const canvasX = (clientX - rect.left) * scaleX;
+        const canvasY = (clientY - rect.top) * scaleY;
+        
+        return { x: Math.max(0, Math.min(canvas.width, canvasX)), y: Math.max(0, Math.min(canvas.height, canvasY)) };
+    };
+
+    const findTextIndexAtPosition = (x, y) => {
+        for (let i = texts.length - 1; i >= 0; i--) {
+            const text = texts[i];
+            const ctx = canvasRef.current.getContext('2d');
+            ctx.font = `${text.fontSize}px Arial`;
+            const metrics = ctx.measureText(text.content);
+            const textWidth = metrics.width;
+            const textHeight = text.fontSize;
+            
+            if (x >= text.x - textWidth/2 && x <= text.x + textWidth/2 &&
+                y >= text.y - textHeight/2 && y <= text.y + textHeight/2) {
+                return i;
+            }
+        }
+        return -1;
+    };
+
+    const handleMouseDown = (e) => {
+        e.preventDefault();
+        const { x, y } = getMousePosition(e);
+        const textIndex = findTextIndexAtPosition(x, y);
+        
+        if (textIndex !== -1) {
+            setDraggingTextIndex(textIndex);
+            setDragOffset({ x: x - texts[textIndex].x, y: y - texts[textIndex].y });
+        }
+    };
+
+    const handleMouseMove = (e) => {
+        if (draggingTextIndex === null) return;
+        e.preventDefault();
+        
+        const { x, y } = getMousePosition(e);
+        const newX = x - dragOffset.x;
+        const newY = y - dragOffset.y;
+        
+        const updatedTexts = [...texts];
+        updatedTexts[draggingTextIndex] = {
+            ...updatedTexts[draggingTextIndex],
+            x: newX,
+            y: newY
+        };
+        setTexts(updatedTexts);
+    };
+
+    const handleMouseUp = () => {
+        setDraggingTextIndex(null);
+    };
+
+    useEffect(() => {
+        const canvas = canvasRef.current;
+        if (!canvas) return;
+        
+        canvas.addEventListener('mousedown', handleMouseDown);
+        window.addEventListener('mousemove', handleMouseMove);
+        window.addEventListener('mouseup', handleMouseUp);
+        canvas.addEventListener('touchstart', handleMouseDown);
+        window.addEventListener('touchmove', handleMouseMove);
+        window.addEventListener('touchend', handleMouseUp);
+        
+        return () => {
+            canvas.removeEventListener('mousedown', handleMouseDown);
+            window.removeEventListener('mousemove', handleMouseMove);
+            window.removeEventListener('mouseup', handleMouseUp);
+            canvas.removeEventListener('touchstart', handleMouseDown);
+            window.removeEventListener('touchmove', handleMouseMove);
+            window.removeEventListener('touchend', handleMouseUp);
+        };
+    }, [texts, draggingTextIndex, dragOffset]);
+
     const generateAICaptions = async () => {
         if (!selectedImage) {
             alert('Please select an image first');
@@ -330,13 +422,10 @@ const CreateMemePage = () => {
         
         try {
             const base64Data = selectedImage.split(',')[1];
-            
             const response = await axios.post(`${API_URL}/ai-caption-vision`, {
                 imageBase64: base64Data,
-                mediaType: 'image',
-                customPrompt: "Analyze this image and generate 5 funny meme captions. Consider what's happening, people's expressions, objects, and any text visible. Make them short, clever, and relatable."
+                mediaType: 'image'
             });
-            
             setAiSuggestions(response.data.suggestions);
             setShowAICaptions(true);
         } catch (error) {
@@ -347,28 +436,36 @@ const CreateMemePage = () => {
         }
     };
 
-    const addAICaption = (caption) => {
-        setTexts([...texts, {
-            content: caption,
-            x: 250,
-            y: 50 + (texts.length * 40),
-            fontSize: textSize,
-            color: textColor
-        }]);
-        setShowAICaptions(false);
-    };
-
     const addText = () => {
         if (currentText.trim()) {
+            const canvas = canvasRef.current;
+            const centerX = canvas ? canvas.width / 2 : 250;
+            const centerY = canvas ? canvas.height / 2 : 250;
+            
             setTexts([...texts, {
                 content: currentText,
-                x: 250,
-                y: 50 + (texts.length * 40),
+                x: centerX,
+                y: centerY,
                 fontSize: textSize,
                 color: textColor
             }]);
             setCurrentText('');
         }
+    };
+
+    const addAICaption = (caption) => {
+        const canvas = canvasRef.current;
+        const centerX = canvas ? canvas.width / 2 : 250;
+        const centerY = canvas ? canvas.height / 2 : 250;
+        
+        setTexts([...texts, {
+            content: caption,
+            x: centerX,
+            y: centerY,
+            fontSize: textSize,
+            color: textColor
+        }]);
+        setShowAICaptions(false);
     };
 
     const downloadMeme = () => {
@@ -485,6 +582,7 @@ const CreateMemePage = () => {
 
                     <div className="text-section">
                         <h4>✏️ Add Text</h4>
+                        <p className="instruction-text">💡 Tip: Click and drag text on the image to reposition it!</p>
                         <input type="text" value={currentText} onChange={(e) => setCurrentText(e.target.value)} placeholder="Enter text" />
                         
                         <div className="color-picker-section">
@@ -511,7 +609,7 @@ const CreateMemePage = () => {
                         
                         {showAICaptions && (
                             <div className="ai-suggestions">
-                                <h4>✨ AI-Generated Captions (Gemini Vision):</h4>
+                                <h4>✨ AI-Generated Captions:</h4>
                                 {aiSuggestions.map((s, idx) => (
                                     <div key={idx} className="suggestion-item" onClick={() => addAICaption(s)}>
                                         {s}
@@ -525,7 +623,9 @@ const CreateMemePage = () => {
                                 <h4>Added Texts:</h4>
                                 {texts.map((text, idx) => (
                                     <div key={idx} className="text-item">
-                                        <div className="text-preview" style={{ color: text.color }}>{text.content}</div>
+                                        <div className="text-preview" style={{ color: text.color }}>
+                                            {text.content} (Position: {Math.round(text.x)}, {Math.round(text.y)})
+                                        </div>
                                         <div className="text-actions">
                                             <button onClick={() => selectTextForEdit(idx)} className="edit-text-btn">✏️</button>
                                             <button onClick={() => deleteText(idx)} className="delete-text-btn">🗑️</button>
@@ -544,7 +644,15 @@ const CreateMemePage = () => {
 
                 <div className="editor-canvas">
                     {selectedImage ? (
-                        <canvas ref={canvasRef} style={{ maxWidth: '100%', height: 'auto', borderRadius: '8px' }} />
+                        <canvas 
+                            ref={canvasRef} 
+                            style={{ 
+                                maxWidth: '100%', 
+                                height: 'auto', 
+                                borderRadius: '8px',
+                                cursor: draggingTextIndex !== null ? 'grabbing' : 'grab'
+                            }} 
+                        />
                     ) : (
                         <div className="no-image">Select an image to start creating your meme</div>
                     )}
@@ -554,7 +662,7 @@ const CreateMemePage = () => {
     );
 };
 
-// ============ CREATE GIF MEME PAGE (with Gemini AI) ============
+// ============ CREATE GIF MEME PAGE (with Draggable Text) ============
 const CreateGifMemePage = () => {
     const [selectedGif, setSelectedGif] = useState(null);
     const [texts, setTexts] = useState([]);
@@ -564,6 +672,10 @@ const CreateGifMemePage = () => {
     const [showAICaptions, setShowAICaptions] = useState(false);
     const [aiSuggestions, setAiSuggestions] = useState([]);
     const [loadingAI, setLoadingAI] = useState(false);
+    const [draggingTextIndex, setDraggingTextIndex] = useState(null);
+    const [dragOffset, setDragOffset] = useState({ x: 0, y: 0 });
+    const [gifDimensions, setGifDimensions] = useState({ width: 0, height: 0 });
+    const containerRef = useRef(null);
     const fileInputRef = useRef(null);
     const { user } = useAuth();
 
@@ -572,7 +684,12 @@ const CreateGifMemePage = () => {
         if (file && file.type === 'image/gif') {
             const reader = new FileReader();
             reader.onload = (e) => {
-                setSelectedGif(e.target.result);
+                const img = new Image();
+                img.onload = () => {
+                    setGifDimensions({ width: img.width, height: img.height });
+                    setSelectedGif(e.target.result);
+                };
+                img.src = e.target.result;
             };
             reader.readAsDataURL(file);
         } else {
@@ -580,7 +697,96 @@ const CreateGifMemePage = () => {
         }
     };
 
-    // Capture first frame of GIF for AI analysis
+    const getMousePosition = (e) => {
+        const container = containerRef.current;
+        if (!container) return { x: 0, y: 0 };
+        
+        const rect = container.getBoundingClientRect();
+        const scaleX = gifDimensions.width / rect.width;
+        const scaleY = gifDimensions.height / rect.height;
+        
+        let clientX, clientY;
+        if (e.touches) {
+            clientX = e.touches[0].clientX;
+            clientY = e.touches[0].clientY;
+        } else {
+            clientX = e.clientX;
+            clientY = e.clientY;
+        }
+        
+        const containerX = (clientX - rect.left) * scaleX;
+        const containerY = (clientY - rect.top) * scaleY;
+        
+        return { x: Math.max(0, Math.min(gifDimensions.width, containerX)), y: Math.max(0, Math.min(gifDimensions.height, containerY)) };
+    };
+
+    const findTextIndexAtPosition = (x, y) => {
+        for (let i = texts.length - 1; i >= 0; i--) {
+            const text = texts[i];
+            const textWidth = text.content.length * (text.fontSize * 0.6);
+            const textHeight = text.fontSize;
+            
+            if (x >= text.x - textWidth/2 && x <= text.x + textWidth/2 &&
+                y >= text.y - textHeight/2 && y <= text.y + textHeight/2) {
+                return i;
+            }
+        }
+        return -1;
+    };
+
+    const handleMouseDown = (e) => {
+        e.preventDefault();
+        const { x, y } = getMousePosition(e);
+        const textIndex = findTextIndexAtPosition(x, y);
+        
+        if (textIndex !== -1) {
+            setDraggingTextIndex(textIndex);
+            setDragOffset({ x: x - texts[textIndex].x, y: y - texts[textIndex].y });
+        }
+    };
+
+    const handleMouseMove = (e) => {
+        if (draggingTextIndex === null) return;
+        e.preventDefault();
+        
+        const { x, y } = getMousePosition(e);
+        const newX = x - dragOffset.x;
+        const newY = y - dragOffset.y;
+        
+        const updatedTexts = [...texts];
+        updatedTexts[draggingTextIndex] = {
+            ...updatedTexts[draggingTextIndex],
+            x: Math.max(0, Math.min(gifDimensions.width, newX)),
+            y: Math.max(0, Math.min(gifDimensions.height, newY))
+        };
+        setTexts(updatedTexts);
+    };
+
+    const handleMouseUp = () => {
+        setDraggingTextIndex(null);
+    };
+
+    useEffect(() => {
+        const container = containerRef.current;
+        if (!container) return;
+        
+        container.addEventListener('mousedown', handleMouseDown);
+        window.addEventListener('mousemove', handleMouseMove);
+        window.addEventListener('mouseup', handleMouseUp);
+        container.addEventListener('touchstart', handleMouseDown);
+        window.addEventListener('touchmove', handleMouseMove);
+        window.addEventListener('touchend', handleMouseUp);
+        
+        return () => {
+            container.removeEventListener('mousedown', handleMouseDown);
+            window.removeEventListener('mousemove', handleMouseMove);
+            window.removeEventListener('mouseup', handleMouseUp);
+            container.removeEventListener('touchstart', handleMouseDown);
+            window.removeEventListener('touchmove', handleMouseMove);
+            window.removeEventListener('touchend', handleMouseUp);
+        };
+    }, [texts, draggingTextIndex, dragOffset, gifDimensions]);
+
     const captureGifFrame = (gifUrl) => {
         return new Promise((resolve) => {
             const img = new Image();
@@ -595,7 +801,6 @@ const CreateGifMemePage = () => {
         });
     };
 
-    // Gemini AI Vision for GIF
     const generateAICaptions = async () => {
         if (!selectedGif) {
             alert('Please select a GIF first');
@@ -608,13 +813,10 @@ const CreateGifMemePage = () => {
         try {
             const firstFrame = await captureGifFrame(selectedGif);
             const base64Data = firstFrame.split(',')[1];
-            
             const response = await axios.post(`${API_URL}/ai-caption-vision`, {
                 imageBase64: base64Data,
-                mediaType: 'gif',
-                customPrompt: "This is from an animated GIF. Based on this frame, generate 5 funny meme captions. Consider the action, expressions, and humor of the GIF. Make them punchy and meme-worthy."
+                mediaType: 'gif'
             });
-            
             setAiSuggestions(response.data.suggestions);
             setShowAICaptions(true);
         } catch (error) {
@@ -629,8 +831,8 @@ const CreateGifMemePage = () => {
         if (currentText.trim()) {
             setTexts([...texts, {
                 content: currentText,
-                x: 50,
-                y: 50 + (texts.length * 40),
+                x: gifDimensions.width / 2,
+                y: gifDimensions.height / 2,
                 fontSize: textSize,
                 color: textColor
             }]);
@@ -641,8 +843,8 @@ const CreateGifMemePage = () => {
     const addAICaption = (caption) => {
         setTexts([...texts, {
             content: caption,
-            x: 50,
-            y: 50 + (texts.length * 40),
+            x: gifDimensions.width / 2,
+            y: gifDimensions.height / 2,
             fontSize: textSize,
             color: textColor
         }]);
@@ -727,6 +929,7 @@ const CreateGifMemePage = () => {
                         <input type="file" accept="image/gif" onChange={handleGifUpload} ref={fileInputRef} style={{display: 'none'}} />
                         <button onClick={() => fileInputRef.current.click()}>Choose GIF File</button>
                         <p className="gif-note">* Supported format: GIF (max 10MB)</p>
+                        <p className="instruction-text">💡 Tip: Click and drag text on the GIF to reposition it!</p>
                     </div>
 
                     <div className="text-section">
@@ -757,7 +960,7 @@ const CreateGifMemePage = () => {
                         
                         {showAICaptions && (
                             <div className="ai-suggestions">
-                                <h4>✨ AI-Generated Captions (Gemini Vision):</h4>
+                                <h4>✨ AI-Generated Captions:</h4>
                                 {aiSuggestions.map((s, idx) => (
                                     <div key={idx} className="suggestion-item" onClick={() => addAICaption(s)}>
                                         {s}
@@ -771,7 +974,9 @@ const CreateGifMemePage = () => {
                                 <h4>Added Texts:</h4>
                                 {texts.map((text, idx) => (
                                     <div key={idx} className="text-item">
-                                        <div className="text-preview" style={{ color: text.color }}>{text.content}</div>
+                                        <div className="text-preview" style={{ color: text.color }}>
+                                            {text.content} (Position: {Math.round(text.x)}, {Math.round(text.y)})
+                                        </div>
                                         <div className="text-actions">
                                             <button onClick={() => selectTextForEdit(idx)} className="edit-text-btn">✏️</button>
                                             <button onClick={() => deleteText(idx)} className="delete-text-btn">🗑️</button>
@@ -790,7 +995,15 @@ const CreateGifMemePage = () => {
 
                 <div className="editor-canvas">
                     {selectedGif ? (
-                        <div className="gif-preview-container">
+                        <div 
+                            ref={containerRef}
+                            className="gif-preview-container"
+                            style={{ 
+                                cursor: draggingTextIndex !== null ? 'grabbing' : 'grab',
+                                position: 'relative',
+                                display: 'inline-block'
+                            }}
+                        >
                             <img src={selectedGif} alt="GIF preview" className="gif-preview" />
                             <div className="gif-text-overlay">
                                 {texts.map((text, idx) => (
@@ -798,11 +1011,17 @@ const CreateGifMemePage = () => {
                                         key={idx}
                                         className="gif-text"
                                         style={{
-                                            left: `${text.x || 50}%`,
-                                            top: `${text.y || 50}px`,
+                                            left: `${(text.x / gifDimensions.width) * 100}%`,
+                                            top: `${(text.y / gifDimensions.height) * 100}%`,
                                             color: text.color,
                                             fontSize: `${text.fontSize}px`,
-                                            transform: 'translateX(-50%)'
+                                            transform: 'translate(-50%, -50%)',
+                                            position: 'absolute',
+                                            fontWeight: 'bold',
+                                            textShadow: '2px 2px 4px rgba(0,0,0,0.5)',
+                                            whiteSpace: 'nowrap',
+                                            zIndex: 10,
+                                            cursor: 'grab'
                                         }}
                                     >
                                         {text.content}

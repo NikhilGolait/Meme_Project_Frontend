@@ -324,6 +324,17 @@ body {
     background: #5a67d8;
 }
 
+/* Instruction Text */
+.instruction-text {
+    font-size: 12px;
+    color: #48bb78;
+    margin-bottom: 10px;
+    text-align: center;
+    background: #f0fff4;
+    padding: 5px;
+    border-radius: 6px;
+}
+
 /* GIF Note */
 .gif-note {
     font-size: 12px;
@@ -598,7 +609,7 @@ body {
 
 .text-preview {
     flex: 1;
-    font-size: 14px;
+    font-size: 12px;
     font-weight: 500;
     word-break: break-word;
 }
@@ -695,6 +706,17 @@ body {
     position: relative;
 }
 
+.editor-canvas canvas {
+    cursor: grab;
+    max-width: 100%;
+    height: auto;
+    border-radius: 8px;
+}
+
+.editor-canvas canvas:active {
+    cursor: grabbing;
+}
+
 .no-image {
     color: #999;
     text-align: center;
@@ -703,9 +725,14 @@ body {
 
 /* GIF Preview Styles */
 .gif-preview-container {
+    cursor: grab;
     position: relative;
     display: inline-block;
     max-width: 100%;
+}
+
+.gif-preview-container:active {
+    cursor: grabbing;
 }
 
 .gif-preview {
@@ -724,6 +751,8 @@ body {
     text-shadow: 2px 2px 4px rgba(0,0,0,0.5);
     white-space: nowrap;
     z-index: 10;
+    cursor: grab;
+    user-select: none;
 }
 
 /* Profile Page */
@@ -913,5 +942,6 @@ body {
         white-space: normal !important;
         word-break: break-word;
         max-width: 90%;
+        text-align: center;
     }
 }
